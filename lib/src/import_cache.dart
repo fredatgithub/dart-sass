@@ -5,7 +5,7 @@
 // DO NOT EDIT. This file was generated from async_import_cache.dart.
 // See tool/synchronize.dart for details.
 //
-// Checksum: 54045771e1267d445a733a83d9fb7e40439d886e
+// Checksum: 9891f1b01241c453f87959609d1dbb82e1fcbdb6
 
 import 'package:collection/collection.dart';
 import 'package:path/path.dart' as p;
@@ -13,6 +13,7 @@ import 'package:tuple/tuple.dart';
 
 import 'ast/sass.dart';
 import 'importer.dart';
+import 'importer/result.dart';
 import 'io.dart';
 import 'logger.dart';
 import 'sync_package_resolver.dart';
@@ -40,6 +41,9 @@ class ImportCache {
   /// The parsed stylesheets for each canonicalized import URL.
   final Map<Uri, Stylesheet> _importCache;
 
+  /// The import results for each canonicalized import URL.
+  final Map<Uri, ImporterResult> _resultsCache;
+
   /// Creates an import cache that resolves imports using [importers].
   ///
   /// Imports are resolved by trying, in order:
@@ -64,7 +68,8 @@ class ImportCache {
       : _importers = _toImporters(importers, loadPaths, packageResolver),
         _logger = logger ?? const Logger.stderr(),
         _canonicalizeCache = {},
-        _importCache = {};
+        _importCache = {},
+        _resultsCache = {};
 
   /// Converts the user's [importers], [loadPaths], and [packageResolver]
   /// options into a single list of importers.
@@ -95,7 +100,8 @@ class ImportCache {
       : _importers = const [],
         _logger = const Logger.stderr(),
         _canonicalizeCache = const {},
-        _importCache = const {};
+        _importCache = const {},
+        _resultsCache = const {};
 
   /// Canonicalizes [url] according to one of this cache's importers.
   ///
@@ -175,6 +181,8 @@ Relative canonical URLs are deprecated and will eventually be disallowed.
     return _importCache.putIfAbsent(canonicalUrl, () {
       var result = importer.load(canonicalUrl);
       if (result == null) return null;
+
+      _resultsCache[canonicalUrl] = result;
       return Stylesheet.parse(result.contents, result.syntax,
           // For backwards-compatibility, relative canonical URLs are resolved
           // relative to [originalUrl].
@@ -187,8 +195,7 @@ Relative canonical URLs are deprecated and will eventually be disallowed.
 
   /// Return a human-friendly URL for [canonicalUrl] to use in a stack trace.
   ///
-  /// Throws a [StateError] if the stylesheet for [canonicalUrl] hasn't been
-  /// loaded by this cache.
+  /// Returns [canonicalUrl] as-is if it hasn't been loaded by this cache.
   Uri humanize(Uri canonicalUrl) {
     // Display the URL with the shortest path length.
     var url = minBy(
@@ -204,6 +211,12 @@ Relative canonical URLs are deprecated and will eventually be disallowed.
     return url.resolve(p.url.basename(canonicalUrl.path));
   }
 
+  /// Returns the URL to use in the source map to refer to [canonicalUrl].
+  ///
+  /// Returns [canonicalUrl] as-is if it hasn't been loaded by this cache.
+  Uri sourceMapUrl(Uri canonicalUrl) =>
+      _resultsCache[canonicalUrl]?.sourceMapUrl ?? canonicalUrl;
+
   /// Clears the cached canonical version of the given [url].
   ///
   /// Has no effect if the canonical version of [url] has not been cached.
@@ -216,6 +229,7 @@ Relative canonical URLs are deprecated and will eventually be disallowed.
   ///
   /// Has no effect if the imported file at [canonicalUrl] has not been cached.
   void clearImport(Uri canonicalUrl) {
+    _resultsCache.remove(canonicalUrl);
     _importCache.remove(canonicalUrl);
   }
 }

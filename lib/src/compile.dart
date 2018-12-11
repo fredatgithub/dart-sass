@@ -3,6 +3,7 @@
 // https://opensource.org/licenses/MIT.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 import 'package:source_maps/source_maps.dart';
@@ -18,6 +19,7 @@ import 'io.dart';
 import 'logger.dart';
 import 'sync_package_resolver.dart';
 import 'syntax.dart';
+import 'utils.dart';
 import 'visitor/async_evaluate.dart';
 import 'visitor/evaluate.dart';
 import 'visitor/serialize.dart';
@@ -27,8 +29,9 @@ import 'visitor/serialize.dart';
 CompileResult compile(String path,
         {Syntax syntax,
         Logger logger,
-        Iterable<Importer> importers,
+        ImportCache importCache,
         NodeImporter nodeImporter,
+        Iterable<Importer> importers,
         SyncPackageResolver packageResolver,
         Iterable<String> loadPaths,
         Iterable<Callable> functions,
@@ -73,11 +76,13 @@ CompileResult compileString(String source,
   var stylesheet =
       Stylesheet.parse(source, syntax ?? Syntax.scss, url: url, logger: logger);
 
-  var evaluateResult = evaluate(stylesheet,
-      importCache: ImportCache(importers,
+  var importCache = ImportCache(importers,
           loadPaths: loadPaths,
           packageResolver: packageResolver,
-          logger: logger),
+          logger: logger);
+
+  var evaluateResult = evaluate(stylesheet,
+      importCache: importCache,
       nodeImporter: nodeImporter,
       importer: importer,
       functions: functions,
@@ -90,6 +95,8 @@ CompileResult compileString(String source,
       indentWidth: indentWidth,
       lineFeed: lineFeed,
       sourceMap: sourceMap);
+
+  _fixSourceMapUrls(serializeResult, importCache.sourceMapUrl, source);
 
   return CompileResult(evaluateResult, serializeResult);
 }
@@ -145,11 +152,13 @@ Future<CompileResult> compileStringAsync(String source,
   var stylesheet =
       Stylesheet.parse(source, syntax ?? Syntax.scss, url: url, logger: logger);
 
-  var evaluateResult = await evaluateAsync(stylesheet,
-      importCache: AsyncImportCache(importers,
+  var importCache = AsyncImportCache(importers,
           loadPaths: loadPaths,
           packageResolver: packageResolver,
-          logger: logger),
+          logger: logger);
+
+  var evaluateResult = await evaluateAsync(stylesheet,
+      importCache: importCache,
       nodeImporter: nodeImporter,
       importer: importer,
       functions: functions,
@@ -163,7 +172,19 @@ Future<CompileResult> compileStringAsync(String source,
       lineFeed: lineFeed,
       sourceMap: sourceMap);
 
+  _fixSourceMapUrls(serializeResult, importCache.sourceMapUrl, source);
+
   return CompileResult(evaluateResult, serializeResult);
+}
+
+/// Destructively updates the source map URLs in [result] with the result of
+/// passing them to [mapUrl].
+///
+/// If a URL is empty (indicating that it came from a string passed without a
+/// URL), replaces it with [source] as a `data:` URL.
+void _fixSourceMapUrls(SerializeResult result, Uri mapUrl(Uri url), String source) {
+  mapListDestructively(result.sourceMap.urls, (url) =>
+      url == '' ? Uri.dataFromString(source, encoding: utf8) : mapUrl(Uri.parse(url)).toString());
 }
 
 /// The result of compiling a Sass document to CSS, along with metadata about

@@ -4,6 +4,7 @@
 
 @TestOn('vm')
 
+import 'package:source_maps/source_maps.dart';
 import 'package:test/test.dart';
 
 import 'package:sass/sass.dart';
@@ -84,6 +85,21 @@ main() {
       .first { url: "first"; }
       .second { url: "second"; }
     '''));
+  });
+
+  test("uses an importer's source map URL", () {
+    SingleMapping map;
+    compileString('@import "orange";',
+        importers: [
+          _TestImporter((url) => Uri.parse("u:$url"), (url) {
+            var color = url.path;
+            return ImporterResult('.$color {color: $color}',
+                sourceMapUrl: Uri.parse("u:blue"), indented: false);
+          })
+        ],
+        sourceMap: (map_) => map = map_);
+
+    expect(map.urls, contains("u:blue"));
   });
 
   test("wraps an error in canonicalize()", () {

@@ -15,6 +15,7 @@ import '../import_cache.dart';
 import '../io.dart';
 import '../stylesheet_graph.dart';
 import '../syntax.dart';
+import '../utils.dart';
 import '../visitor/async_evaluate.dart';
 import '../visitor/evaluate.dart';
 import '../visitor/serialize.dart';
@@ -129,15 +130,8 @@ String _writeSourceMap(
     sourceMap.targetUrl = p.toUri(p.basename(destination)).toString();
   }
 
-  for (var i = 0; i < sourceMap.urls.length; i++) {
-    var url = sourceMap.urls[i];
-
-    // The special URL "" indicates a file that came from stdin.
-    if (url == "") continue;
-
-    sourceMap.urls[i] =
-        options.sourceMapUrl(Uri.parse(url), destination).toString();
-  }
+  mapListDestructively(sourceMap.urls, (url) =>
+      options.sourceMapUrl(Uri.parse(url), destination).toString());
   var sourceMapText =
       jsonEncode(sourceMap.toJson(includeSourceContents: options.embedSources));
 
